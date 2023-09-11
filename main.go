@@ -45,6 +45,7 @@ func handleGetMessage(request *restful.request){
 func handleLogout(request *restful.request){
 	
 }
+
 func main() {
 	
 }
