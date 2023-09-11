@@ -1,51 +1,59 @@
 package main
 
 import (
-	"encoding/json"
-	"github.com/emicklei/go-restful/v3"
+	"net/http"
+	"sync"
 	"time"
-	"fmt"
+
+	restful "github.com/emicklei/go-restful/v3"
 )
 
-type loginReqest struct {
-	Username string 'json:username'
+// Message represents a chat message.
+type Message struct {
+	Sender    string    `json:"sender"`
+	Content   string    `json:"content"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
-type authToken struct {
-	Token string 'json:token'
+// ChatServer represents the chat server.
+type ChatServer struct {
+	users          map[string]string // Username to token mapping
+	messages       []Message         // Message history
+	userLastActive map[string]time.Time
+	mu             sync.Mutex
 }
 
-type userStatus struct {
-	Username string 'json:username',
-	Online string 'json:online'
-}
-
-type message struct {
-	Message string 'json:message'
-}
-
-type messageResponse struct {
-	Id int 'json:id',
-	Message string 'json:message',
-	Author string 'json:author'
-}
-
-func generateToken() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
-}
-
-func handleLogin(request *restful.request) {
-}
-func handlSendMessage(request *restful.request){
-
-}
-func handleGetMessage(request *restful.request){
-
-}
-func handleLogout(request *restful.request){
-	
+func NewChatServer() *ChatServer {
+	return &ChatServer{
+		users:          make(map[string]string),
+		messages:       []Message{},
+		userLastActive: make(map[string]time.Time),
+	}
 }
 
 func main() {
-	
+	chatServer := NewChatServer()
+
+	ws := new(restful.WebService)
+	ws.Path("/chat").
+		Consumes(restful.MIME_JSON).
+		Produces(restful.MIME_JSON)
+
+	// Register the chat service endpoints
+	ws.Route(ws.GET("/login/{username}").To(chatServer.login))
+	ws.Route(ws.POST("/logout").To(chatServer.logout))
+	ws.Route(ws.POST("/message").To(chatServer.sendMessage))
+	ws.Route(ws.GET("/messages").To(chatServer.getMessages))
+	ws.Route(ws.GET("/users").To(chatServer.getUsers))
+
+	restful.Add(ws)
+
+	// Start a goroutine to check for inactive users and log them out
+	go chatServer.checkInactiveUsers()
+
+	// Start the server
+	http.ListenAndServe(":8080", nil)
+}
+
+func (cs *ChatServer) checkInactiveUsers() {
 }
