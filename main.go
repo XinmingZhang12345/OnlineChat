@@ -23,6 +23,7 @@ type ChatServer struct {
 	mu             sync.Mutex
 }
 
+// NewChatServer creates a new chat server instance.
 func NewChatServer() *ChatServer {
 	return &ChatServer{
 		users:          make(map[string]string),
@@ -55,5 +56,51 @@ func main() {
 	http.ListenAndServe(":8080", nil)
 }
 
+func (cs *ChatServer) login(req *restful.Request, resp *restful.Response) {
+	// Extract the username from the request path
+	username := req.PathParameter("username")
+
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Check if the username is already taken
+	if _, exists := cs.users[username]; exists {
+		resp.WriteHeader(http.StatusConflict)
+		resp.WriteEntity("Username already in use")
+		return
+	}
+
+	// Generate a token for the user
+	token := generateToken()
+
+	// Store the user and token
+	cs.users[username] = token
+	cs.userLastActive[username] = time.Now()
+
+	resp.WriteHeader(http.StatusCreated)
+	resp.WriteEntity(token)
+}
+
+func (cs *ChatServer) logout(req *restful.Request, resp *restful.Response) {
+
+}
+
+func (cs *ChatServer) sendMessage(req *restful.Request, resp *restful.Response) {
+
+}
+
+func (cs *ChatServer) getMessages(req *restful.Request, resp *restful.Response) {
+}
+
+func (cs *ChatServer) getUsers(req *restful.Request, resp *restful.Response) {
+
+}
+
 func (cs *ChatServer) checkInactiveUsers() {
+
+}
+
+func generateToken() string {
+
+	return "sampletoken"
 }
