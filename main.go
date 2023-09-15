@@ -1,11 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
 	restful "github.com/emicklei/go-restful/v3"
+	"github.com/google/uuid"
 )
 
 // Message represents a chat message.
@@ -82,25 +84,108 @@ func (cs *ChatServer) login(req *restful.Request, resp *restful.Response) {
 }
 
 func (cs *ChatServer) logout(req *restful.Request, resp *restful.Response) {
+	username := req.QueryParameter("username")
 
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Check if the user exists
+	if _, exists := cs.users[username]; exists {
+		delete(cs.users, username)
+		delete(cs.userLastActive, username)
+		resp.WriteHeader(http.StatusOK)
+		resp.WriteEntity("Logout successful")
+	} else {
+		resp.WriteHeader(http.StatusNotFound)
+		resp.WriteEntity("User not found")
+	}
 }
 
 func (cs *ChatServer) sendMessage(req *restful.Request, resp *restful.Response) {
+	message := Message{}
+	err := req.ReadEntity(&message)
+	if err != nil {
+		resp.WriteHeader(http.StatusBadRequest)
+		resp.WriteEntity("Invalid message format")
+		return
+	}
 
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Check if the sender exists
+	if _, exists := cs.users[message.Sender]; !exists {
+		resp.WriteHeader(http.StatusUnauthorized)
+		resp.WriteEntity("User not logged in")
+		return
+	}
+
+	message.Timestamp = time.Now()
+	cs.messages = append(cs.messages, message)
+	cs.userLastActive[message.Sender] = time.Now()
+
+	resp.WriteHeader(http.StatusCreated)
+	resp.WriteEntity("Message sent successfully")
 }
 
 func (cs *ChatServer) getMessages(req *restful.Request, resp *restful.Response) {
+	username := req.QueryParameter("username")
+
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	// Check if the user exists
+	if _, exists := cs.users[username]; !exists {
+		resp.WriteHeader(http.StatusUnauthorized)
+		resp.WriteEntity("User not logged in")
+		return
+	}
+
+	// Filter messages sent after the user's last activity
+	userLastActive := cs.userLastActive[username]
+	filteredMessages := []Message{}
+	for _, message := range cs.messages {
+		if message.Timestamp.After(userLastActive) {
+			filteredMessages = append(filteredMessages, message)
+		}
+	}
+
+	resp.WriteHeader(http.StatusOK)
+	resp.WriteEntity(filteredMessages)
 }
 
 func (cs *ChatServer) getUsers(req *restful.Request, resp *restful.Response) {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
 
+	// Get the list of currently logged-in users
+	userList := make([]string, 0, len(cs.users))
+	for user := range cs.users {
+		userList = append(userList, user)
+	}
+
+	resp.WriteHeader(http.StatusOK)
+	resp.WriteEntity(userList)
 }
 
 func (cs *ChatServer) checkInactiveUsers() {
+	for {
+		time.Sleep(time.Minute)
 
+		cs.mu.Lock()
+		currentTime := time.Now()
+		for username, lastActiveTime := range cs.userLastActive {
+			if currentTime.Sub(lastActiveTime) > (5 * time.Minute) { // Change the timeout duration as needed
+				delete(cs.users, username)
+				delete(cs.userLastActive, username)
+				fmt.Printf("User %s logged out due to inactivity\n", username)
+			}
+		}
+		cs.mu.Unlock()
+	}
 }
 
 func generateToken() string {
 
-	return "sampletoken"
+	return uuid.New().String()
 }
